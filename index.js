@@ -24,8 +24,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildPresences,
     GatewayIntentBits.GuildWebhooks,
-    GatewayIntentBits.GuildMessages,      // ← AJOUTE ÇA
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildInvites
   ],
   partials: [Partials.GuildMember],
 });
@@ -103,6 +104,9 @@ client.on(Events.ClientReady, async () => {
 
   console.log("✅ Cache des webhooks initialisé");
 });
+
+// ================== STOCKAGE RAID (pour les boutons) ==================
+client.raidJoins = new Map();
 
 // ================== PROTECTION ADMIN ==================
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
@@ -288,6 +292,113 @@ client.on(Events.InteractionCreate, async interaction => {
             components: []
           });
         }
+      }
+    }
+
+    // -------- Raid buttons (banall / kicksuspects / ignore) --------
+    if (type === 'raid') {
+      const guild = interaction.guild;
+      const inviteCode = interaction.customId.split('_')[2];
+
+      if (action === 'banall') {
+        const inviterId = interaction.customId.split('_')[2];
+        
+        await interaction.deferUpdate();
+
+        // Récupérer les membres de ce raid depuis le cache
+        const raidData = client.raidJoins.get(inviteCode);
+        let bannedCount = 0;
+
+        // Ban l'inviter
+        const inviter = await guild.members.fetch(inviterId).catch(() => null);
+        if (inviter) {
+          await inviter.ban({ reason: `Raid détecté - Invite suspecte (Action par ${interaction.user.tag})` }).catch(err => console.error(err));
+          bannedCount++;
+        }
+
+        // Ban tous ceux qui ont rejoint via cette invite
+        if (raidData && raidData.length > 0) {
+          for (const joinData of raidData) {
+            const member = await guild.members.fetch(joinData.member.id).catch(() => null);
+            if (member) {
+              await member.ban({ reason: `Raid - Invite suspecte ${inviteCode} (Action par ${interaction.user.tag})` }).catch(err => console.error(err));
+              bannedCount++;
+            }
+          }
+        }
+
+        const banEmbed = new EmbedBuilder()
+          .setTitle('🔨 Action Exécutée - Ban Massif')
+          .setColor('Red')
+          .setDescription(`**${bannedCount} membre(s) banni(s)**\n\nInviter: ${inviter ? inviter.user.tag : 'Déjà parti'}\nCode invite: \`${inviteCode}\``)
+          .setFooter({ text: `Action par ${interaction.user.tag}` })
+          .setTimestamp();
+
+        // Nettoyer le cache
+        client.raidJoins.delete(inviteCode);
+
+        return interaction.editReply({
+          embeds: [banEmbed],
+          components: []
+        });
+      }
+
+      if (action === 'kicksuspects') {
+        await interaction.deferUpdate();
+
+        const raidData = client.raidJoins.get(inviteCode);
+        let kickedCount = 0;
+
+        // Kick seulement les membres suspects
+        if (raidData && raidData.length > 0) {
+          for (const joinData of raidData) {
+            const member = joinData.member;
+            const accountAge = Date.now() - member.user.createdTimestamp;
+            const accountAgeDays = Math.floor(accountAge / (1000 * 60 * 60 * 24));
+            const hasAvatar = member.user.displayAvatarURL() !== member.user.defaultAvatarURL;
+
+            // Kick si suspect (compte récent ou pas d'avatar)
+            if (accountAgeDays < 7 || !hasAvatar) {
+              const m = await guild.members.fetch(member.id).catch(() => null);
+              if (m) {
+                await m.kick(`Raid - Membre suspect (Action par ${interaction.user.tag})`).catch(err => console.error(err));
+                kickedCount++;
+              }
+            }
+          }
+        }
+
+        const kickEmbed = new EmbedBuilder()
+          .setTitle('⚠️ Action Exécutée - Kick Suspects')
+          .setColor('Orange')
+          .setDescription(`**${kickedCount} membre(s) suspect(s) kick(s)**\n\nCode invite: \`${inviteCode}\``)
+          .setFooter({ text: `Action par ${interaction.user.tag}` })
+          .setTimestamp();
+
+        // Nettoyer le cache
+        client.raidJoins.delete(inviteCode);
+
+        return interaction.editReply({
+          embeds: [kickEmbed],
+          components: []
+        });
+      }
+
+      if (action === 'ignore') {
+        const ignoreEmbed = new EmbedBuilder()
+          .setTitle('✅ Faux Positif')
+          .setColor('Green')
+          .setDescription(`Alerte marquée comme faux positif.\nCode invite: \`${inviteCode}\``)
+          .setFooter({ text: `Par ${interaction.user.tag}` })
+          .setTimestamp();
+
+        // Nettoyer le cache
+        client.raidJoins.delete(inviteCode);
+
+        return interaction.update({
+          embeds: [ignoreEmbed],
+          components: []
+        });
       }
     }
 
