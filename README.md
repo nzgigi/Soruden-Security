@@ -1,5 +1,3 @@
-for any questions here is my discord : gmnz
-
 # Soruden Security
 
 Soruden Security is an advanced **security bot** for Discord designed to protect servers against raids, newly created alternate accounts, permission abuse, and webhook abuse.  
@@ -29,6 +27,14 @@ It is primarily used for the Soruden community around the game Trove, but can be
 - An alert is sent to a dedicated channel with:
   - An **OK** button to whitelist the person and allow them to create **one** webhook.
   - A button to ban the person if the webhook creation is deemed malicious.
+
+### Anti-everyone mention
+
+- Detects and prevents @everyone / @here mention spam.
+- Tracks mentions per user within a configurable time window (default: 60 seconds).
+- After 2 mentions: warning message sent and message deleted.
+- After 3 mentions: automatic ban with detailed logging.
+- All actions are logged to a dedicated channel with timestamp, user info, and reason.
 
 ### Interaction security
 
