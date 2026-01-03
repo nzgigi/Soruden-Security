@@ -23,7 +23,9 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildWebhooks
+    GatewayIntentBits.GuildWebhooks,
+    GatewayIntentBits.GuildMessages,      // ← AJOUTE ÇA
+    GatewayIntentBits.MessageContent
   ],
   partials: [Partials.GuildMember],
 });
