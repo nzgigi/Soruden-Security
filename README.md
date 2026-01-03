@@ -1,66 +1,214 @@
-# Soruden Security
+# Soruden Security (Discord Bot)
 
-Soruden Security is an advanced **security bot** for Discord designed to protect servers against raids, newly created alternate accounts, permission abuse, and webhook abuse.  
-It is primarily used for the Soruden community around the game Trove, but can be adapted to other servers.
+Soruden Security is a private, security-focused Discord bot built for the Soruden community (Trove).  
+Tech stack: Node.js + discord.js v14+.  
+Note: All bot messages (embeds, replies, DMs) are in **French**.
 
-> **Note:** All text content in the bot's code (messages, embeds, DMs, etc.) is in **French**, as the developer and target community are French-speaking.
+- Repository: https://github.com/nzgigi/Soruden-Security
+- Contact: Discord `gmnz`
+
+---
 
 ## Main Features
 
-### Anti-alt (recent accounts)
+- **Anti-alt system**
+  - Kicks accounts younger than 7 days
+  - Bans after 3 attempts
 
-- Automatically kicks members whose Discord account is less than 7 days old.
-- If a user attempts to join 3 times with an account that's too recent, they are automatically banned.
-- A direct message (DM) is sent to the member after each attempt to explain the reason.
+- **Anti-admin permission**
+  - Detects and blocks unauthorized admin role assignments
+  - Uses audit log context to identify the executor
 
-### Anti admin permission
+- **Anti-webhook**
+  - Detects and manages unauthorized webhook creation
+  - Dedicated logging for webhook-related events
 
-- Automatically detects when someone grants administrator permission to another member.
-- The administrator permission is immediately removed from the member who received it.
-- An alert is sent to a dedicated channel with:
-  - An **OK** button to validate the action.
-  - A button to remove admin permission or ban both people involved (depending on the implemented logic).
+- **Anti-@everyone / @here**
+  - Prevents @everyone/@here spam
+  - Bans after 3 mentions within 60 seconds
 
-### Anti-webhook
+- **Invite Tracking & Raid Detection (NEW)**
+  - Tracks all joins with full traceability
+  - Detects invite-based mass-join raids (configurable)
+  - Two-channel logging (joins vs security alerts)
+  - Admin response buttons (ban all / kick suspects / false positive)
+  - Full audit trail of joins and staff actions
 
-- Automatic deletion of any newly created webhook on the server (by default).
-- An alert is sent to a dedicated channel with:
-  - An **OK** button to whitelist the person and allow them to create **one** webhook.
-  - A button to ban the person if the webhook creation is deemed malicious.
+---
 
-### Anti-everyone mention
+## Invite Tracking & Raid Detection (NEW)
 
-- Detects and prevents @everyone / @here mention spam.
-- Tracks mentions per user within a configurable time window (default: 60 seconds).
-- After 2 mentions: warning message sent and message deleted.
-- After 3 mentions: automatic ban with detailed logging.
-- All actions are logged to a dedicated channel with timestamp, user info, and reason.
+This module provides a complete audit trail of member joins and automatically detects invite-based raids.
 
-### Interaction security
+### Core Functionality (full join traceability)
+- Logs **every** member join (suspicious or not)
+- Captures full details:
+  - Inviter (who invited them)
+  - Invite code used
+  - Account age
+  - Avatar presence (no avatar = suspicious)
+  - Useful join context for moderation/auditing
+- Maintains an internal cache of server invites to accurately identify which invite was used on each join
 
-- Only Discord IDs specified in `ALLOWED_USERS` (in the `.env` file) can interact with buttons and certain sensitive actions of the bot.
-- This restricts the use of critical features to trusted administrators only.
+### Raid Detection (configurable thresholds)
+- Triggers an alert when many users join through the **same invite** in a short time window
+- Default detection settings:
+  - 10+ joins
+  - within 10 seconds
+- Suspicion analysis considers:
+  - Account age (e.g., < 7 days = suspicious)
+  - No avatar = suspicious
+  - Username pattern signals (basic pattern detection)
 
-## Available Commands
+### Two-channel Logging System
+To avoid spamming alerts while keeping full traceability:
+- `JOIN_LOG_CHANNEL_ID`:
+  - Logs **all joins** in a clean, non-noisy format
+  - Keeps a complete audit trail (normal activity included)
+- `ALERT_CHANNEL_ID`:
+  - Security alerts only (raid detections, suspicious waves)
+  - Includes interactive moderation actions (buttons)
 
-### Security / Staff Commands
+### Admin Response Buttons (on raid alert)
+When a raid is detected, the alert includes buttons:
+- **Ban inviter + all members**
+  - Bans the user who created the invite and everyone who joined via it during the raid window
+- **Kick suspects only**
+  - Kicks only suspicious members (e.g., new accounts and/or no avatar)
+- **False positive**
+  - Marks the event as safe (useful for streamer raids or community events)
 
-- `admins.js`  
-  Displays the list of users who have administrator permission on the server.
+All actions are logged (who executed them and when).
 
-- `audit-perms.js`  
-  Analyzes server roles and permissions and highlights what is sensitive or potentially dangerous (roles with too many permissions, etc.).
+### Protection Scenarios Covered
+- Classic bot raids (many fresh accounts joining quickly)
+- Server advertising / spam attacks (waves joining via the same invite to spam)
+- Compromised accounts (a normally inactive member suddenly invites many people)
+- Legitimate mass joins can be allowed via “False positive”
 
-### Slash Commands
+---
 
-- `/help`  
-  Displays the list of available commands and/or a description of the main features of the bot.
+## Requirements
 
-- `/bot`  
-  Displays the list of all bots present on the server (or general information about bots, depending on your implementation).
+- Node.js (LTS recommended)
+- A Discord application/bot created in the Discord Developer Portal
+- discord.js v14+
 
-## Tech Stack
+---
 
-- Node.js
-- discord.js (v14+)
-- Secret management via `.env` file (token, allowed IDs, etc.)
+## Installation
+
+1) Clone the repository
+```bash
+git clone https://github.com/nzgigi/Soruden-Security.git
+cd Soruden-Security
+```
+
+2) Install dependencies
+```bash
+npm install
+```
+
+3) Create your environment file
+```bash
+cp .env.example .env
+```
+
+4) Fill in `.env` (see below)
+
+5) Start the bot
+```bash
+node .
+```
+
+(Optionally run with a process manager like PM2 or systemd in production.)
+
+---
+
+## Environment Variables (.env)
+
+Example:
+```env
+DISCORD_TOKEN=
+DISCORD_CLIENT_ID=
+DISCORD_GUILD_ID=
+
+# Whitelist of Discord user IDs allowed to execute administrative actions
+# (alert buttons, sensitive commands, validations).
+# Comma-separated (preferably without spaces).
+ALLOWED_USERS=123456789012345678,987654321098765432
+
+# Channels
+ALERT_CHANNEL_ID=
+WEBHOOK_LOG_CHANNEL_ID=
+LOG_CHANNEL_ID=
+JOIN_LOG_CHANNEL_ID=
+```
+
+### What each channel is for
+- `LOG_CHANNEL_ID`: General security logs (anti-alt, anti-everyone/@here, anti-admin, etc.)
+- `WEBHOOK_LOG_CHANNEL_ID`: Webhook security logs (creation/abuse management)
+- `JOIN_LOG_CHANNEL_ID` (NEW): Logs **all** member joins (full invite tracking audit trail)
+- `ALERT_CHANNEL_ID`: Security alerts only (raid detections + action buttons + staff actions)
+
+---
+
+## Required Gateway Intents
+
+Enable these intents in the Developer Portal and in your bot configuration:
+
+- Guilds
+- GuildMembers
+- GuildPresences
+- GuildWebhooks
+- GuildMessages
+- MessageContent
+- GuildInvites (NEW — required for invite tracking)
+
+---
+
+## Required Bot Permissions
+
+Grant the bot (via role or server permissions):
+
+- Manage Members (kick/ban)
+- Manage Roles
+- Manage Webhooks
+- Manage Guild (required for invite tracking)
+- Read/Send Messages in log channels
+- View Audit Log
+
+---
+
+## Configuration
+
+### Recommended logging setup
+For best results, keep joins and alerts separated:
+- `JOIN_LOG_CHANNEL_ID` = all joins (clean audit trail)
+- `ALERT_CHANNEL_ID` = security incidents only (raids + buttons)
+
+### Raid detection thresholds
+You can customize thresholds in:
+- `events/inviteTracking.js`
+
+Default example:
+```js
+// events/inviteTracking.js
+const RAID_THRESHOLD = 10;      // number of joins to trigger an alert
+const RAID_TIME_WINDOW = 10000; // time window in milliseconds
+```
+
+---
+
+## Warnings / Safety Notes
+
+- Tune raid thresholds carefully to avoid false positives during legitimate events (streamer raids, announcements, community events)
+- Always test on a test server first before deploying to production
+- Ensure intents and permissions are correctly enabled; missing access can reduce detection accuracy or prevent actions
+
+---
+
+## Support / Contact
+
+Private project for Soruden community use.  
+Discord: `gmnz`
