@@ -464,6 +464,45 @@ client.on(Events.InteractionCreate, async interaction => {
         content: `✅ **${deleted} rôle(s) orphelin(s) supprimé(s)**`
       });
     }
+
+    // -------- Anti-Hack False Positive --------
+    if (type === 'hack' && action === 'false') {
+      const targetId = interaction.customId.split('_')[2];
+      const level = parseInt(interaction.customId.split('_')[3]);
+
+      const guild = interaction.guild;
+      const member = await guild.members.fetch(targetId).catch(() => null);
+
+      if (member) {
+        // Retire timeout si appliqué
+        if (level === 2) {
+          try {
+            await member.timeout(null, `False positive - Correction par ${interaction.user.tag}`);
+          } catch {}
+        }
+
+        // Unban si LVL3
+        if (level === 3) {
+          try {
+            await guild.members.unban(targetId, `False positive - Correction par ${interaction.user.tag}`);
+          } catch {}
+        }
+      }
+
+      const correctionEmbed = new EmbedBuilder()
+        .setTitle('✅ False Positive Corrigé')
+        .setColor('Green')
+        .setDescription(`**${member?.user.tag || 'Membre introuvable'}**\n\nSanctions annulées (Level ${level})`)
+        .setFooter({ text: `Corrigé par ${interaction.user.tag}` })
+        .setTimestamp();
+
+      await interaction.update({
+        embeds: [correctionEmbed],
+        components: []
+      });
+
+      console.log(`✅ False positive corrigé pour ${member?.user.tag} (LVL${level}) par ${interaction.user.tag}`);
+    }
   }
 });
 
