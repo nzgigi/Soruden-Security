@@ -31,6 +31,15 @@ module.exports = {
     if (!message.guild) return;
     if (message.author.bot) return;
 
+    // 🔔 Réagir si le bot est ping
+    if (message.mentions.has(message.client.user)) {
+        try {
+            await message.react('👀'); // Emoji à changer si tu veux
+        } catch (err) {
+            console.error('Impossible de réagir au message :', err);
+        }
+    }
+
     // Vérifie s'il y a des fichiers attachés
     if (message.attachments.size === 0) return;
 
