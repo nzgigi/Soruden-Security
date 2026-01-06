@@ -1,0 +1,6 @@
+{
+  "whitelistedRoles": [
+    "1457879963037466928"
+  ],
+  "description": "Rôles à ignorer dans les logs (questionnaire, auto-roles, etc.)"
+}

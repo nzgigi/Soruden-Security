@@ -89,9 +89,7 @@ client.on(Events.ClientReady, async () => {
 
   for (const guild of client.guilds.cache.values()) {
     for (const channel of guild.channels.cache.values()) {
-      // On ne garde que les TextChannel et NewsChannel (exclut Voice, Stage, Category, Threads)
-      if (channel.type !== 0 && channel.type !== 5) continue; 
-      // 0 = GuildText, 5 = GuildNews
+      if (channel.type !== 0 && channel.type !== 5) continue;
 
       try {
         const ws = await channel.fetchWebhooks();
@@ -196,7 +194,6 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isButton()) {
     const allowedUsers = process.env.ALLOWED_USERS.split(',');
     
-    // Vérifie que c'est un admin autorisé
     if (!allowedUsers.includes(interaction.user.id)) {
       return interaction.reply({ 
         content: '❌ Seuls les administrateurs principaux peuvent valider.', 
@@ -305,18 +302,15 @@ client.on(Events.InteractionCreate, async interaction => {
         
         await interaction.deferUpdate();
 
-        // Récupérer les membres de ce raid depuis le cache
         const raidData = client.raidJoins.get(inviteCode);
         let bannedCount = 0;
 
-        // Ban l'inviter
         const inviter = await guild.members.fetch(inviterId).catch(() => null);
         if (inviter) {
           await inviter.ban({ reason: `Raid détecté - Invite suspecte (Action par ${interaction.user.tag})` }).catch(err => console.error(err));
           bannedCount++;
         }
 
-        // Ban tous ceux qui ont rejoint via cette invite
         if (raidData && raidData.length > 0) {
           for (const joinData of raidData) {
             const member = await guild.members.fetch(joinData.member.id).catch(() => null);
@@ -334,7 +328,6 @@ client.on(Events.InteractionCreate, async interaction => {
           .setFooter({ text: `Action par ${interaction.user.tag}` })
           .setTimestamp();
 
-        // Nettoyer le cache
         client.raidJoins.delete(inviteCode);
 
         return interaction.editReply({
@@ -349,7 +342,6 @@ client.on(Events.InteractionCreate, async interaction => {
         const raidData = client.raidJoins.get(inviteCode);
         let kickedCount = 0;
 
-        // Kick seulement les membres suspects
         if (raidData && raidData.length > 0) {
           for (const joinData of raidData) {
             const member = joinData.member;
@@ -357,7 +349,6 @@ client.on(Events.InteractionCreate, async interaction => {
             const accountAgeDays = Math.floor(accountAge / (1000 * 60 * 60 * 24));
             const hasAvatar = member.user.displayAvatarURL() !== member.user.defaultAvatarURL;
 
-            // Kick si suspect (compte récent ou pas d'avatar)
             if (accountAgeDays < 7 || !hasAvatar) {
               const m = await guild.members.fetch(member.id).catch(() => null);
               if (m) {
@@ -375,7 +366,6 @@ client.on(Events.InteractionCreate, async interaction => {
           .setFooter({ text: `Action par ${interaction.user.tag}` })
           .setTimestamp();
 
-        // Nettoyer le cache
         client.raidJoins.delete(inviteCode);
 
         return interaction.editReply({
@@ -392,7 +382,6 @@ client.on(Events.InteractionCreate, async interaction => {
           .setFooter({ text: `Par ${interaction.user.tag}` })
           .setTimestamp();
 
-        // Nettoyer le cache
         client.raidJoins.delete(inviteCode);
 
         return interaction.update({
@@ -413,7 +402,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
       
-      // Génère un rapport texte complet
       let report = `=== RAPPORT D'AUDIT DE PERMISSIONS ===\n`;
       report += `Serveur: ${interaction.guild.name}\n`;
       report += `Date: ${new Date().toLocaleString('fr-FR')}\n`;
@@ -426,7 +414,6 @@ client.on(Events.InteractionCreate, async interaction => {
         report += `${'='.repeat(50)}\n\n`;
       }
       
-      // Crée un fichier
       const buffer = Buffer.from(report, 'utf-8');
       const attachment = new AttachmentBuilder(buffer, { 
         name: `audit-${interaction.guild.id}-${Date.now()}.txt` 
@@ -474,14 +461,12 @@ client.on(Events.InteractionCreate, async interaction => {
       const member = await guild.members.fetch(targetId).catch(() => null);
 
       if (member) {
-        // Retire timeout si appliqué
         if (level === 2) {
           try {
             await member.timeout(null, `False positive - Correction par ${interaction.user.tag}`);
           } catch {}
         }
 
-        // Unban si LVL3
         if (level === 3) {
           try {
             await guild.members.unban(targetId, `False positive - Correction par ${interaction.user.tag}`);
@@ -502,6 +487,81 @@ client.on(Events.InteractionCreate, async interaction => {
       });
 
       console.log(`✅ False positive corrigé pour ${member?.user.tag} (LVL${level}) par ${interaction.user.tag}`);
+    }
+
+    // -------- Role Log buttons (reverse / ban) --------
+    if (interaction.customId.startsWith('role_reverse_')) {
+      await interaction.deferUpdate(); // ACK immédiat
+
+      const parts = interaction.customId.split('_');
+      const auditId = parts[2];
+      const targetId = parts[3];
+      const roleIds = parts[4];
+      const actionType = parts[5];
+
+      const guild = interaction.guild;
+      const target = await guild.members.fetch(targetId).catch(() => null);
+      if (!target) {
+        return interaction.followUp({ content: 'Membre introuvable.', ephemeral: true });
+      }
+
+      const auditLogs = await guild.fetchAuditLogs({ limit: 100 });
+      const entry = auditLogs.entries.find(e => e.id === auditId);
+      if (!entry) {
+        return interaction.followUp({ content: 'Audit expiré.', ephemeral: true });
+      }
+
+      const roles = roleIds.split('|').map(id => guild.roles.cache.get(id)).filter(Boolean);
+
+      let success = false;
+      if (actionType === 'add' && roles.length > 0) {
+        await target.roles.remove(roles, 'Reverse via log');
+        success = true;
+      } else if (actionType === 'remove' && roles.length > 0) {
+        await target.roles.add(roles, 'Reverse via log');
+        success = true;
+      }
+
+      const reverseEmbed = new EmbedBuilder()
+        .setTitle('🔄 Reverse appliqué')
+        .setColor('Blue')
+        .setDescription(`${success ? '✅' : '❌'} Rôle(s) ${actionType === 'add' ? 'retiré(s)' : 'ajouté(s)'} pour ${target}`)
+        .setFooter({ text: `Par ${interaction.user.tag}` })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [reverseEmbed], components: [] });
+      console.log(`🔄 Role reverse par ${interaction.user.tag} sur ${target.user.tag}`);
+      return;
+    }
+
+    if (interaction.customId.startsWith('role_ban_')) {
+      await interaction.deferUpdate(); // ACK immédiat
+
+      const parts = interaction.customId.split('_');
+      const executorId = parts[2];
+      const targetId = parts[3];
+      const auditId = parts[4];
+
+      const guild = interaction.guild;
+      const executor = await guild.members.fetch(executorId).catch(() => null);
+      const target = await guild.members.fetch(targetId).catch(() => null);
+
+      if (executor) await executor.ban({ reason: `Action rôle suspecte - Log ${auditId}` }).catch(console.error);
+      if (target) await target.ban({ reason: `Victime rôle suspecte - Log ${auditId}` }).catch(console.error);
+
+      const banEmbed = new EmbedBuilder()
+        .setTitle('🔨 Bans appliqués')
+        .setColor('Red')
+        .addFields(
+          { name: 'Exécuteur', value: executor ? `${executor.user.tag}` : 'Introuvable', inline: true },
+          { name: 'Cible', value: target ? `${target.user.tag}` : 'Introuvable', inline: true }
+        )
+        .setFooter({ text: `Par ${interaction.user.tag} | Audit ${auditId}` })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [banEmbed], components: [] });
+      console.log(`🔨 Role ban par ${interaction.user.tag}`);
+      return;
     }
   }
 });
